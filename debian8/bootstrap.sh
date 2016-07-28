@@ -13,12 +13,11 @@ usage() {
     echo "Bootstrap a salt master on a Debian system."
     echo ""
     echo "Mandatory arguments to long options are mandatory for short options too."
-    echo "-f   don't nag"
     echo "-o   directories to chown for the salt user+group"
     echo "-O   same as -o, but don't chown default directories"
+    echo "-q   don't output anything"
     echo "-u   install as specific user"
     echo "-v   use verbose output (-vvv for most verbose)"
-    echo "-q   don't output anything"
     echo ""
     echo "-h   display this help and exit"
     echo "-V   show version information and exit"
@@ -50,9 +49,13 @@ verbose_printer() {
 # default config
 confirm=true
 verbosity=3
+
+nonroot=true
 saltuser="salt"
 saltgroup="salt"
-nonroot=true
+
+interactive=true
+
 # directories that should be owned by the salt user
 saltowneddirs="/etc/salt /var/cache/salt /var/log/salt /var/run/salt"
 
@@ -65,30 +68,18 @@ invalid_argument() {
 
 process_arguments() {
     OPTIND=1
-    while getopts ":fhvu:" opt; do
+    while getopts ":foOuyhvqV:" opt; do
         info "Parsing option '$opt'..."
         case $opt in
-            h)
-                usage
-                ;;
-            o)
-                saltowneddirs="$saltowneddirs $OPTARG"
-                ;;
-            O)
-                saltowneddirs="$OPTARG"
-                ;;
-            u)
-                saltuser=$2
-                ;;
-            y)
-                confirm=false
-                ;;
-            V)
-                version
-                ;;
-            \?)
-                invalid_argument $OPTARG
-                ;;
+            o)  saltowneddirs="$saltowneddirs $OPTARG";;
+            O)  saltowneddirs="$OPTARG";;
+            q)  quiet=true;;
+            u)  saltuser=$OPTARG;;
+            v)  $((verbosity++));;
+
+            h)  usage;;
+            V)  version;;
+            \?) invalid_argument $OPTARG;;
         esac
     done
 }
@@ -96,25 +87,6 @@ process_arguments() {
 echo "Processing commandline arguments..."
 process_arguments $@
 echo "Done."
-
-
-
-# prevent foot-shooting
-confirm() {
-    echo "This script runs commands using sudo. Use at your own peril."
-    echo "To disable this prompt, use the -f option."
-    echo ""
-    while true; do
-        read -p "Do you wish to run this SaltStack deployment script? [Y/N]: " answer
-        case $answer in
-            [Yy]* ) return;;
-            [Nn]* ) echo "Aborting."; exit;;
-            * ) echo "Y/N?"
-        esac
-    done
-}
-
-[ $confirm == false ] || confirm
 
 
 
@@ -147,24 +119,24 @@ apt-get install salt-master salt-minion
 info "Done."
 
 if [ $nonroot == true ] ; then
+    # add users and groups
+    info "Adding $saltgroup group..."
+    groupadd -f "$saltgroup"
+    info "Done."
+
+    info "Adding ${saltuser} user..."
+    id -u $saltuser || sudo useradd -g "$saltgroup" "$saltuser"
+    info "Done."
+
+    # take ownership of directories to be used by salt
+    info "Taking ownership of salt directories..."
+    for directory in $saltowneddirs
+    do
+        info "$directory"
+        chown -R "$saltgroup" $directory
+    done
+    info "Done."
 fi
-# add users and groups
-info "Adding $saltgroup group..."
-groupadd -f "$saltgroup"
-info "Done."
-
-info "Adding ${saltuser} user..."
-id -u $saltuser || sudo useradd -g "$saltgroup" "$saltuser"
-info "Done."
-
-# take ownership of directories to be used by salt
-info "Taking ownership of salt directories..."
-for directory in $saltowneddirs
-do
-    info "$directory"
-    chown -R "$saltgroup" $directory
-done
-info "Done."
 
 # deploy salt settings
 info "Deploying salt config files..."
@@ -181,4 +153,9 @@ if [ -f minion ]; then
 fi
 info "Done."
 
-sudo -u $saltuser salt-key -L
+# authorize keys
+if [ "$nonroot" == "true" ] ; then
+    sudo -u $saltuser salt-key -L
+elif
+    sudo salt-key -L
+fi
