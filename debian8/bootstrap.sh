@@ -52,6 +52,7 @@ confirm=true
 verbosity=3
 saltuser="salt"
 saltgroup="salt"
+nonroot=true
 # directories that should be owned by the salt user
 saltowneddirs="/etc/salt /var/cache/salt /var/log/salt /var/run/salt"
 
@@ -142,12 +143,14 @@ exit
 
 # install salt
 info "Installing required packages..."
-sudo apt-get install salt-master salt-minion
+apt-get install salt-master salt-minion
 info "Done."
 
+if [ $nonroot == true ] ; then
+fi
 # add users and groups
 info "Adding $saltgroup group..."
-sudo groupadd -f "$saltgroup"
+groupadd -f "$saltgroup"
 info "Done."
 
 info "Adding ${saltuser} user..."
@@ -159,7 +162,7 @@ info "Taking ownership of salt directories..."
 for directory in $saltowneddirs
 do
     info "$directory"
-    sudo chown -R "$saltgroup" $directory
+    chown -R "$saltgroup" $directory
 done
 info "Done."
 
