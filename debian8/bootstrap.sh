@@ -98,14 +98,17 @@ command_exists() {
 
 
 # ensure we have certain commands available as user
-requiredcommands="echo command sudo getopts anu rm cp chown useradd groupadd"
+requiredcommands="echo command sudo getopts rm cp chown useradd groupadd"
 for command in $requiredcommands
 do
     info "Checking if required command '$command' exists..."
     command_exists "$command" || {
+        apt-get install $command
+    } || {
         error "Can't access required command '$command', aborting."
         exit;
     }
+
     info "Done."
 done
 
